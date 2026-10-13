@@ -1,0 +1,62 @@
+name: Unity 2D Platformer CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sanity_check:
+    name: Sanity Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Unity directories
+        run: |
+          echo "=== Проверка структуры Unity ==="
+          for dir in Assets Packages ProjectSettings; do
+            if [ -d "$dir" ]; then
+              echo "Найдена папка: $dir"
+            else
+              echo "ОШИБКА: папка $dir не найдена"
+              exit 1
+            fi
+          done
+
+      - name: Locate expected C# scripts
+        run: |
+          echo "=== Поиск C#-скриптов ==="
+          find Assets -type f -name "*Controller.cs" -print || true
+          find Assets -type f -name "BuildManager.cs" -print || true
+
+  mirror_repo:
+    name: Mirror to backup repository
+    needs: sanity_check
+    if: github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify backup token exists
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          if [ -z "$BACKUP_TOKEN" ]; then
+            echo "ОШИБКА: секрет BACKUP_TOKEN не задан"
+            exit 1
+          fi
+          echo "Секрет BACKUP_TOKEN задан"
+
+      - name: Push to backup repository
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          git remote add backup "https://x-access-token:${BACKUP_TOKEN}@github.com/Zatik-Vustina/APRO_LR1_Zlata_Vustina_backup.git"
+          git push backup --all --force
+          git push backup --tags --force
