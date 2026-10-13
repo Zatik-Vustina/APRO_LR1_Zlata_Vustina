@@ -1,7 +1,18 @@
-Library/
-Temp/
-Obj/
-Logs/
-UserSettings/
-Builds/
-*.log
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Bb]uild/
+[Bb]uilds/
+
+# Visual Studio
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+
+# Build logs
+build_webgl.log
