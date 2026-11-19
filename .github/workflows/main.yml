@@ -65,6 +65,21 @@ jobs:
             fi
           done
           test ! -s artifacts/activation.log
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          # Stop before GameCI can interpret malformed input as a path.
+          try:
+              root = ET.fromstring(os.environ["UNITY_LICENSE"].lstrip("\ufeff \t\n\r"))
+              if root.tag.lower() != "root":
+                  raise ValueError
+          except (ET.ParseError, ValueError):
+              message = "UNITY_LICENSE must contain the XML of an activated Unity .ulf file."
+              Path("artifacts/activation.log").write_text(message + "\n", encoding="utf-8")
+              raise SystemExit(message) from None
+          PY
 
       - uses: actions/cache@v4
         with:
