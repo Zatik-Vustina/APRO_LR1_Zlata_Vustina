@@ -39,9 +39,86 @@ jobs:
           find Assets -type f -name '*Controller.cs' -print
           printf '%s\n' Assets/Editor/BuildManager.cs
 
+  run_tests:
+    name: Run Unity tests
+    needs: sanity_check
+    if: github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      UNITY_VERSION: 6000.3.10f1
+      GAMECI_VERSION: v0.1.72
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Unity version and configure licensing
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          mkdir -p artifacts
+          grep -Fx "m_EditorVersion: $UNITY_VERSION" ProjectSettings/ProjectVersion.txt
+          for secret in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD; do
+            if [ -z "${!secret}" ]; then
+              printf 'Missing GitHub Actions secret: %s\n' "$secret" | tee -a artifacts/activation.log
+            fi
+          done
+          test ! -s artifacts/activation.log
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          # Stop before GameCI can interpret malformed input as a path.
+          try:
+              root = ET.fromstring(os.environ["UNITY_LICENSE"].lstrip("\ufeff \t\n\r"))
+              if root.tag.lower() != "root":
+                  raise ValueError
+          except (ET.ParseError, ValueError):
+              message = "UNITY_LICENSE must contain the XML of an activated Unity .ulf file."
+              Path("artifacts/activation.log").write_text(message + "\n", encoding="utf-8")
+              raise SystemExit(message) from None
+          PY
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Unity-Library-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'Assets/**/*.asmdef', 'ProjectSettings/**') }}
+
+      - name: Install GameCI CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/game-ci/cli/releases/download/$GAMECI_VERSION/game-ci-linux-x64.tar.gz" \
+            --output "$RUNNER_TEMP/game-ci.tar.gz"
+          printf '%s  %s\n' '1de550a620ee92e05e920b6db7d431621440b60b2577f04b4a997dc92a58cb0a' "$RUNNER_TEMP/game-ci.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/game-ci.tar.gz" -C "$RUNNER_TEMP" ./game-ci
+
+      - name: Run EditMode and PlayMode tests
+        shell: bash
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          "$RUNNER_TEMP/game-ci" test --docker --dockerShmSize=1025m \
+            --engine=unity --testPlatforms='playmode;editmode;COMBINE_RESULTS' \
+            --engineVersion="$UNITY_VERSION" --coverageEnabled=false \
+            --artifactsPath=artifacts --dockerIsolationMode=default \
+            --containerRegistryRepository=unityci/editor --containerRegistryImageVersion=3 \
+            2>&1 | tee artifacts/gameci.log
+
+      - name: Upload test results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/
+          if-no-files-found: warn
+
   mirror_repo:
     name: Mirror to backup repository
-    needs: sanity_check
+    needs: run_tests
     if: github.event_name == 'push' && github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
     runs-on: ubuntu-latest
     steps:
@@ -78,7 +155,7 @@ jobs:
 
   build_docker_image:
     name: Build Docker image
-    needs: sanity_check
+    needs: run_tests
     if: github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
     runs-on: ubuntu-latest
     permissions:

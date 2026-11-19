@@ -1,0 +1,10 @@
+{
+    "name": "PlayModeTests",
+    "references": [
+        "GameAssembly"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "autoReferenced": false
+}
