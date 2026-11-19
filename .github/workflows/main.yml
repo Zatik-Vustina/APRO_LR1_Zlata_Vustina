@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   sanity_check:
@@ -28,13 +34,15 @@ jobs:
       - name: Locate expected C# scripts
         run: |
           echo "=== Поиск C#-скриптов ==="
-          find Assets -type f -name "*Controller.cs" -print || true
-          find Assets -type f -name "BuildManager.cs" -print || true
+          test -n "$(find Assets -type f -name '*Controller.cs' -print -quit)"
+          test -f Assets/Editor/BuildManager.cs
+          find Assets -type f -name '*Controller.cs' -print
+          printf '%s\n' Assets/Editor/BuildManager.cs
 
   mirror_repo:
     name: Mirror to backup repository
     needs: sanity_check
-    if: github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
+    if: github.event_name == 'push' && github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full history
@@ -58,5 +66,49 @@ jobs:
           BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
         run: |
           git remote add backup "https://x-access-token:${BACKUP_TOKEN}@github.com/Zatik-Vustina/APRO_LR1_Zlata_Vustina_backup.git"
-          git push backup --all --force
-          git push backup --tags --force
+          # Checkout fetches other branches into refs/remotes/origin.
+          refs=(HEAD:refs/heads/main)
+          while IFS= read -r ref; do
+            branch=${ref#refs/remotes/origin/}
+            if [[ "$branch" != HEAD && "$branch" != main ]]; then
+              refs+=("$ref:refs/heads/$branch")
+            fi
+          done < <(git for-each-ref --format='%(refname)' refs/remotes/origin/)
+          git push --atomic --tags backup "${refs[@]}"
+
+  build_docker_image:
+    name: Build Docker image
+    needs: sanity_check
+    if: github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare WebGL placeholders
+        run: |
+          mkdir -p Builds/WebGL/Build
+          printf '<!doctype html><title>LR3</title><h1>LR3 WebGL placeholder</h1>\n' > Builds/WebGL/index.html
+          printf '// LR3 placeholder\n' | gzip -n > Builds/WebGL/Build/game.framework.js.gz
+          printf '' | gzip -n > Builds/WebGL/Build/game.wasm.gz
+          printf '' | gzip -n > Builds/WebGL/Build/game.data.gz
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image and publish on main
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          tags: |
+            ghcr.io/zatik-vustina/platformer-game:latest
+            ghcr.io/zatik-vustina/platformer-game:${{ github.sha }}
