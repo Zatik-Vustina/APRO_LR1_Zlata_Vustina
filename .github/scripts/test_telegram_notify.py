@@ -5,7 +5,7 @@ from threading import Thread
 import unittest
 from unittest.mock import Mock
 
-from telegram_notify import NotificationError, format_message, send_message
+from telegram_notify import NotificationError, format_message, parse_chat_id, send_message
 
 
 JOBS = ("sanity_check", "run_tests", "mirror_repo", "build_docker_image")
@@ -99,6 +99,16 @@ class TelegramNotificationTests(unittest.TestCase):
             with self.subTest(body=body):
                 with self.assertRaisesRegex(NotificationError, diagnostic):
                     self.exchange("test", body=body)
+
+    def test_chat_id_accepts_outer_whitespace(self):
+        self.assertEqual(parse_chat_id(f" \t{CHAT}\r\n"), CHAT)
+        self.assertEqual(parse_chat_id(" 12345 "), 12345)
+
+    def test_chat_id_rejects_empty_and_non_numeric_input(self):
+        for value in ("", " \n", "0", '"12345"', "12 345", "@test", "123.45"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(NotificationError, "TELEGRAM_CHAT_ID"):
+                    parse_chat_id(value)
 
     def test_transport_exception_is_redacted(self):
         connection = Mock()

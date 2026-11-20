@@ -78,13 +78,23 @@ def send_message(connection, token, chat_id, message):
         connection.close()
 
 
+def parse_chat_id(value):
+    """Accept a numeric chat ID pasted with leading or trailing whitespace."""
+    chat = value.strip()
+    if not chat:
+        raise NotificationError("TELEGRAM_CHAT_ID отсутствует или пуст.")
+    if not re.fullmatch(r"-?[1-9][0-9]{0,18}", chat):
+        raise NotificationError(
+            "TELEGRAM_CHAT_ID должен содержать только цифры и, при необходимости, знак минус."
+        )
+    return int(chat)
+
+
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat = os.getenv("TELEGRAM_CHAT_ID", "")
     if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
         raise NotificationError("TELEGRAM_BOT_TOKEN отсутствует или имеет неверный формат.")
-    if not re.fullmatch(r"-?[1-9][0-9]{0,18}", chat):
-        raise NotificationError("TELEGRAM_CHAT_ID должен содержать числовой идентификатор.")
+    chat = parse_chat_id(os.getenv("TELEGRAM_CHAT_ID", ""))
 
     game_url = os.getenv("UNITY_GAME_URL", "").strip()
     if game_url:
@@ -109,7 +119,7 @@ def main():
     except (KeyError, AttributeError, TypeError, ValueError):
         raise NotificationError("Контекст GitHub Actions неполон или некорректен.") from None
 
-    send_message(http.client.HTTPSConnection("api.telegram.org", timeout=15), token, int(chat), message)
+    send_message(http.client.HTTPSConnection("api.telegram.org", timeout=15), token, chat, message)
     print("Telegram API подтвердил отправку.")
 
 
