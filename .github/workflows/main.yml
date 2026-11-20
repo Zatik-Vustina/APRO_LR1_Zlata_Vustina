@@ -51,35 +51,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify Unity version and configure licensing
+      - name: Verify Unity version and Personal licensing inputs
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         run: |
           mkdir -p artifacts
           grep -Fx "m_EditorVersion: $UNITY_VERSION" ProjectSettings/ProjectVersion.txt
-          for secret in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD; do
+          for secret in UNITY_EMAIL UNITY_PASSWORD; do
             if [ -z "${!secret}" ]; then
               printf 'Missing GitHub Actions secret: %s\n' "$secret" | tee -a artifacts/activation.log
             fi
           done
           test ! -s artifacts/activation.log
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-
-          # Stop before GameCI can interpret malformed input as a path.
-          try:
-              root = ET.fromstring(os.environ["UNITY_LICENSE"].lstrip("\ufeff \t\n\r"))
-              if root.tag.lower() != "root":
-                  raise ValueError
-          except (ET.ParseError, ValueError):
-              message = "UNITY_LICENSE must contain the XML of an activated Unity .ulf file."
-              Path("artifacts/activation.log").write_text(message + "\n", encoding="utf-8")
-              raise SystemExit(message) from None
-          PY
 
       - uses: actions/cache@v4
         with:
@@ -97,13 +81,12 @@ jobs:
       - name: Run EditMode and PlayMode tests
         shell: bash
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         run: |
           "$RUNNER_TEMP/game-ci" test --docker --dockerShmSize=1025m \
             --engine=unity --testPlatforms='playmode;editmode;COMBINE_RESULTS' \
-            --engineVersion="$UNITY_VERSION" --coverageEnabled=false \
+            --engineVersion="$UNITY_VERSION" --unityLicensingMethod=personal --coverageEnabled=false \
             --artifactsPath=artifacts --dockerIsolationMode=default \
             --containerRegistryRepository=unityci/editor --containerRegistryImageVersion=3 \
             2>&1 | tee artifacts/gameci.log
