@@ -172,3 +172,25 @@ jobs:
           tags: |
             ghcr.io/zatik-vustina/platformer-game:latest
             ghcr.io/zatik-vustina/platformer-game:${{ github.sha }}
+
+  notify:
+    name: Notify in Telegram
+    needs: [sanity_check, run_tests, mirror_repo, build_docker_image]
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Zatik-Vustina/APRO_LR1_Zlata_Vustina' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Send Telegram notification
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          UNITY_GAME_URL: ${{ vars.UNITY_GAME_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 .github/scripts/telegram_notify.py

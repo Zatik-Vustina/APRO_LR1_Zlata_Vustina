@@ -6,6 +6,7 @@
 | 2. Sanity Check и зеркало | [LR2.md](LR2.md) |
 | 3. Docker и Nginx | [LR3.md](LR3.md) |
 | 4. Тестирование Unity в CI/CD | [LR4.md](LR4.md) |
+| 6. Telegram-оповещения | [LR6.md](LR6.md) |
 
 
 # Лабораторная работа №1. Автоматизация сборки 2D игры через командную строку (CLI)
